@@ -1,0 +1,503 @@
+#!/bin/bash
+
+start=1
+end=100 
+win_height=400
+cut_left=100
+cut_top=100
+stride=8
+cols=0
+direction="ltr"
+delay=0.12
+opt="none"
+del_all="no"
+negate="no"
+trim="none"
+scale_h=100
+cuts=""
+dups="none"
+linger=1
+linger_frame=20
+top_trim="auto"
+skip=0
+frame_rate=24
+crf=17
+split=40
+from=0
+last_page=0
+base_folder="date"
+
+while [ $# -gt 0 ]; do
+
+if [[ $1 == *"--"* ]]; then
+param="${1/--/}"
+declare $param="$2"
+# echo $1 $2 // Optional to see the parameter:value result
+fi
+
+shift
+done
+
+if [ ! -f "$input" ]; then
+echo "$input doesn't exist"
+echo "Please provide the input file using --input option"
+exit 1
+fi
+if [ -z ${reset+x} ]; then 
+echo "reset is unset"; 
+else 
+opt="all"
+echo "reset is set to '$reset'"; 
+fi
+
+start_page=$start
+end_page=$end
+
+echo "input = $input, opt = $opt, start=$start_page end = $end_page"
+
+#echo "./conv.sh " $@ >> "$input".sh
+
+
+cut_pages=()
+cut_locs=()
+for elem in $cuts; do
+	arr=(${elem//:/ })
+	p=${arr[0]}
+	loc=${arr[1]}
+	cut_pages=( "${cut_pages[@]}" "$p" ) 
+	cut_locs=( "${cut_locs[@]}" "$loc" )
+done
+
+
+function get_index() {
+	value="$1"
+	shift
+	local index=0
+	for i in "$@"; do
+	if [[ "$i" = "${value}" ]]; then
+	echo "${index}";
+	return
+	fi
+	((index++))
+	done
+	return 1
+}
+
+fullpath=$input
+filename="${fullpath##*/}"                      # Strip longest match of */ from start
+dir="${fullpath:0:${#fullpath} - ${#filename}}" # Substring from 0 thru pos of filename
+base="${filename%.[^.]*}"                       # Strip shortest match of . plus at least one non-dot char from end
+ext="${filename:${#base} + 1}"                  # Substring from len of base thru end
+
+echo "directory is $dir"
+
+alldir="$dir"all."$base"
+
+if [[ $opt = "rma" ]] || [[ $opt = "rmall" ]]; then
+	echo "Removing $alldir"
+	rm -r "$alldir"
+fi
+
+
+echo "delay:$delay win_hegith:$win_height stride:$stride"
+
+if [[ ! -d "$alldir" ]]; then
+	echo "Generating all pages.. (It runs once)"
+	mkdir "$alldir"
+	if [[ $last_page -gt 0 ]]; then
+		pdftoppm "$fullpath" -l $last_page -png "$alldir"/page 
+	else
+		pdftoppm "$fullpath" -png "$alldir"/page
+	fi
+	if [[ $trim != "none" ]]; then
+		for img in "$alldir"/*.png; do    
+			convert "$img"  "$img"
+		done      
+	fi
+fi
+	
+image_files=( "$alldir"/*.png )
+all_images_num=${#image_files[@]}
+current="${image_files[$from]}"
+page_width=$(identify -format "%w" $current)
+page_height=$(identify -format "%h" $current)
+pad_x=$((44-(page_width%4)))
+
+echo "page_width:$page_width pad_x:$pad_x "
+
+page_width=$((page_width + pad_x))
+middle=$((page_width /2))
+
+trim=0
+if [[ $cols -eq 0 ]]; then   
+	convert "$current" -crop +0+600 +repage -alpha off -colorspace gray -negate -scale x1\! -threshold 2% txt: > "$alldir"/col_detect.txt
+	filled_seen=0
+	x_begin=0
+	x_end=0
+  counter=0
+	while IFS= read -r line; do
+		line_arr=($line)
+		pos=${line_arr[0]}
+		color=${line_arr[3]}
+		if [[ $color = "white" ]]; then # filled space
+			pos_arr=(${pos//,/ })
+		  xpos=${pos_arr[0]}
+			if [[ $x_begin -gt 0 ]]; then
+				x_end=$xpos
+				echo "x_end: $x_end"
+				break;
+      else
+        if [[ $trim = 0 ]]; then
+				  trim=$((xpos - 20))                      
+				  echo "Trim 1: $trim"
+        fi
+			fi
+			filled_seen=1
+      counter=0
+		else # empty space
+			if [[ $filled_seen -eq 1 ]] && [[ $x_begin -eq 0 ]]; then
+				pos_arr=(${pos//,/ })
+				xpos=${pos_arr[0]}
+        counter=$((counter + 1))
+        if [[ $counter -gt 10 ]]; then
+  				if [[ $xpos -gt $((page_width / 3)) ]] && [[ $xpos -lt $((2*(page_width / 3))) ]]; then
+  					x_begin=$xpos
+  					echo "x_begin: $x_begin"
+  				else
+            if [[ $xpos -lt $((page_width / 3)) ]]; then        
+  				     trim=0
+  				 	   echo "Trim 2: $trim, xpos:$xpos"
+            fi
+  				fi
+        fi
+			fi
+		fi 
+		
+	done < "$alldir"/col_detect.txt
+	
+	if [[ $x_end -gt 0 ]]; then
+		middle=$(((x_begin + x_end) / 2))
+		middle=$((middle + (pad_x/2)))
+		cols=2
+		echo "Two columns detected ... middle: $middle"
+	fi      
+fi  
+
+if [[ $cols != 2 ]]; then
+  scale_h=200
+else
+	convert "$current" -alpha off -colorspace gray -negate -scale 1x\! -threshold 2% txt: > "$alldir"/vert.txt  
+	filled_seen=0
+  	counter=0
+  	v_cut=0
+	while IFS= read -r line; do
+		line_arr=($line)
+		pos=${line_arr[0]}
+		color=${line_arr[3]}
+		if [[ $color = "white" ]]; then # filled space
+			pos_arr=(${pos//,/ })
+		  	ypos=${pos_arr[0]}
+			filled_seen=1
+      			counter=0
+		else # empty space
+			if [[ $filled_seen -eq 1 ]]; then #empty space after filled space
+				pos_arr=(${pos//,/ })
+				ypos=${pos_arr[0]}
+        			counter=$((counter + 1))
+        			if [[ $counter -gt 30 ]]; then
+	    				if [[ $ypos -lt $((page_height / 3)) ]]; then        
+				     		v_cut=$((ypos - 10))
+			 	     		echo "Cut 2: $v_cut, ypos:$ypos"
+					fi
+        			fi
+			fi
+		fi 		
+	done < "$alldir"/vert.txt	
+	if [[ $v_cut -gt 0 ]]; then
+		p=1
+		loc=$v_cut
+		cut_pages=( "${cut_pages[@]}" "$p" ) 
+		cut_locs=( "${cut_locs[@]}" "$loc" )
+	fi
+fi 
+
+ii=1
+ff="%02d"
+if [[ $all_images_num -gt 99 ]]; then
+ff="%03d"
+fi
+
+do_trim=""
+if [[ $top_trim = "auto" ]]; then
+	do_trim="-trim +repage -bordercolor white -border 10x20"
+fi
+
+shave=""
+if [[ $trim != "none" ]]; then
+	shave="$trim"x0
+	shave="-shave $shave +repage"		
+  echo "Shaving at $trim"
+fi
+	
+for img in "$alldir"/*.png; do  
+	pnum=$(printf $ff $ii)
+	convert "$img" $shave -adaptive-resize "$page_width"x +repage "$img" 
+	num=${pnum#0}
+	if [[ $cols -eq 2 ]]; then
+	cut=0
+	if page_index=$(get_index $num "${cut_pages[@]}"); then
+		echo "Cutting page $pnum ..."
+		cut="${cut_locs[$page_index]}"
+	fi
+	if [[ $cut -gt 0 ]]; then          
+		convert "$img" -crop x"$cut"+0+0 +repage $do_trim -adaptive-resize "$page_width"x "$alldir"/page-"$pnum"-cut-0.png           
+	fi
+  safe_margin=0
+	m1=$((middle + $safe_margin))
+	m2=$((middle - $safe_margin))
+	col1="$m1"x"0"+0+"$cut"
+	col2="$m1"x"0"+"$m2"+"$cut"
+	
+	if [[ $direction = "rtl" ]]; then
+		col1="$middle"x"0"+"$middle"+"$cut"
+		col2="$middle"x"0"+0+"$cut"
+	fi
+	convert "$img" -crop $col1 +repage $do_trim -background black -adaptive-resize "$page_width"x  "$alldir"/page-"$pnum"-cut-1.png           
+	convert "$img" -crop $col2 +repage $do_trim -background black -adaptive-resize "$page_width"x  "$alldir"/page-"$pnum"-cut-2.png           
+	rm "$img"
+	else
+		convert "$img" $do_trim +repage -adaptive-resize "$page_width"x "$img" 		
+	fi
+	if [[ $dups != "none" ]]; then	
+		if [[ $dups = "all" ]]; then
+			cp "$img" "$alldir"/page-"$pnum"-2.png
+			mv "$img" "$alldir"/page-"$pnum"-1.png	
+		else 
+			if [[ " ${dups[@]} " =~ " ${num} " ]]; then
+				echo "Duplicating page $pnum ..."
+				cp "$img" "$alldir"/page-"$pnum"-2.png
+				mv "$img" "$alldir"/page-"$pnum"-1.png	
+			fi
+		fi
+	fi
+	ii=$((ii+1))
+done
+
+image_files=( "$alldir"/*.png )
+all_images_num=${#image_files[@]}
+
+if [[ $end_page -gt $all_images_num ]]; then
+	end_page=$all_images_num
+	if [[ $cols = 2 ]]; then
+		end_page=$((all_images_num/2))
+	fi
+fi
+
+factor=$((win_height/stride))
+factor=5
+first_delay=$(echo $delay+5 | bc)
+beg=$((0 + win_height)) 
+
+outputdir="$dir"out."$base"
+
+if [[ $opt = "rmo" ]] || [[ $opt = "rmall" ]]; then
+	echo "Removing $outputdir"
+	rm -r "$outputdir"
+fi
+
+all_list_file="$outputdir"/list.txt
+
+
+if [[ ! -d "$outputdir" ]]; then
+# Control will enter here if output folder doesn't exist. 
+	mkdir "$outputdir"
+fi
+
+# output folder for video
+dt=$(date '+%d-%m');
+echo "$dt"
+
+videodir="$dir""00"."$base" 
+
+if [[ $opt = "rmv" ]] || [[ $opt = "rmall" ]]; then
+	echo "Removing $videodir"
+	rm -r "$videodir"
+fi
+
+if [[ ! -d "$videodir" ]]; then
+	mkdir  "$videodir"
+fi
+
+echo "Video dir is: $videodir"
+video_list="$videodir"/vidlist.txt
+
+echo "$win_height $stride " > "$outputdir/prop.txt"
+
+page_num=-1
+
+echo "Generating images for $start_page to $end_page"
+first=-1
+image_files=( "$alldir"/*.png )
+page_height=0
+col_num=1
+frame=-1
+video_num=1
+
+last_video_page=1
+echo "Video file is: $video_file"
+if [ -f "$all_list_file" ]; then
+	rm "$all_list_file"
+fi
+if [ -f "$video_list" ]; then
+	rm "$video_list"
+fi
+
+for ((ii=0; ii<${#image_files[@]}; ii++)); do
+
+	page=${image_files[$ii]}
+	filename="${page##*/}"
+	name=$(echo "$filename" | cut -f 1 -d '.')
+	arr=(${name//-/ })
+	num=${arr[1]}
+	new_page=0
+
+	num=${num#0}
+	if [[ $num -ne $page_num ]]; then
+		new_page=1
+		frame=-1
+	fi
+
+	page_num=$num
+
+	if [[ $num -lt $start_page ]]; then
+		continue
+	fi
+	if [[ $num -gt $end_page ]]; then
+		break
+	fi
+	echo "Processing page $page_num of $end_page"
+
+	prev_page_height=$page_height
+
+	page_height=$(identify -format "%h" $page)
+	page_width=$(identify -format "%w" $page)
+	#read page_width page_height < <(identify -format "%w %h" $page)
+		
+	if [[ $first -lt 0 ]] && [[ $ii -eq 0 ]]; then
+		cp "${image_files[$ii]}" "$base"_temp.png
+		current="$base"_temp.png
+		first=1	
+		limit=$page_height
+		top=0
+		mdelay=$first_delay
+	else
+		t1="${image_files[$ii-1]}"
+		t2="${image_files[$ii]}"    
+		if [[ $negate = "yes" ]]; then
+			if [ $((ii%2)) -eq 0 ]; then
+				convert -negate ${image_files[$ii]} t2.png
+				t1="${image_files[$ii-1]}"
+				t2="t2.png"
+			else 
+				convert -negate ${image_files[$ii-1]} t1.png
+				t1="t1.png"
+				t2="${image_files[$ii]}"
+			fi
+		fi
+		convert "$t1" "$t2" -append "$base"_temp.png
+		current="$base"_temp.png
+		limit=$((prev_page_height + page_height))
+		top=$((limit-page_height-win_height+stride))
+	fi 
+	#echo "current image: $current top:$top"
+	bottom=$((top+win_height))
+	left=0
+	win_width=$page_width
+
+	pnum=$(printf "%03d" $num) 
+	iii=$(printf "%03d" $ii)
+
+		
+	if [[ $new_page -eq 1 ]] && [[ $page_num -gt 1 ]] && [[ $(((page_num - 1)%split)) -eq 0 ]]; then   
+		echo "Generating video ..."
+
+    prevp=$((page_num - 1))
+    video_name="$last_video_page"_"$prevp".mp4   
+    video_file="$videodir"/$video_name
+    last_video_page=$page_num
+   
+		if [[ ! -f "$video_file" ]] && [[ -f "$all_list_file" ]]; then
+		ffmpeg -f concat -i $all_list_file -c:v libx264 -crf $crf -pix_fmt yuv420p "$video_file" 
+      rm "$all_list_file"  
+		fi
+	  if [[ -f "$video_file" ]]; then
+		  echo "file '$video_name'" >> "$video_list" 
+		fi
+		#-map 0 -f segment -segment_time 120 "$video_file"_%03d.mp4   #> /dev/null 2>&1 < /dev/null
+		#mdelay=$first_delay
+		video_num=$((video_num + 1))
+	fi
+
+	list_file="$outputdir"/list_file"$ii".txt
+
+	if [[ -f $list_file ]]; then
+		cat $list_file >> $all_list_file
+		continue
+	fi
+	while [  $bottom -lt $limit ]; do
+		frame=$((frame+1))
+		i=$((frame+1000))
+		fname="page_"$pnum"_"$i".png"
+	
+		if [[ $((frame%(skip+1) )) -eq 0 ]]; then   
+			echo "file $fname" >> $list_file	      
+		if [[ $linger -gt 1 ]] && [[ $((frame%linger_frame)) -eq 0 ]]; then
+			mdelay=$linger
+		fi
+			echo "duration $mdelay" >> $list_file
+		fi
+		mdelay=$delay                
+			
+		if [ -f "$outputdir"/$fname ]; then
+			continue
+		fi
+		crop="$win_width"x"$win_height"+"$left"+"$top"				
+
+		scaledH=$((win_height+scale_h))
+		# -adaptive-resize x"$scaledH"\!
+		convert $current -crop "$crop" +repage -quality 99 -adaptive-resize x"$scaledH"\! +repage -pointsize 24 -fill white -undercolor '#56f' -gravity "NorthEast" -annotate +10+20  "$page_num" "$outputdir"/$fname
+		
+		top=$((top+stride))
+		bottom=$((top+win_height))
+	done #while
+	cat $list_file >> $all_list_file
+done
+
+rm "$base"_temp.png
+
+echo "Generating video ..."
+video_name="$last_video_page"_"$page_num".mp4   
+video_file="$videodir"/$video_name
+last_video_page=$page_num
+    
+if [[ ! -f "$video_file" ]]; then
+	ffmpeg -f concat -i "$all_list_file" -c:v libx264 -crf $crf -pix_fmt yuv420p "$video_file"
+fi 
+
+if [[ -f "$video_file" ]]; then
+  echo "file '$video_name'" >> "$video_list" 
+fi
+
+#-map 0 -f segment -segment_time 120 "$video_file"_%03d.mp4   #> /dev/null 2>&1 < /dev/null
+if [[ $dir = "" ]]; then
+	dir="$base"
+fi
+
+if [[ ! -d "$dir"/"$dir" ]]; then
+	mkdir "$dir"/"$dir"
+fi
+
+if [[ ! -f "$dir"/"$dir"/"$base".mp4 ]]; then
+	ffmpeg -f concat -safe 0 -i "$video_list" -c copy "$dir"/"$dir"/"$base".mp4
+fi
+cp "$dir"/"$dir"/"$base".mp4 ~/send/	
