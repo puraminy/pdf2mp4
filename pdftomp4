@@ -1,11 +1,11 @@
 #!/bin/bash
 
-start=1
-end=100 
-win_height=400
-cut_left=100
-cut_top=100
-stride=8
+start=1 # start page
+end=100 # end page
+win_height=400 # the height of screen window
+cut_left=100 # the margin from left and right
+cut_top=100 # the margin from top 
+stride=8   # how many frames can be skipped
 cols=0
 direction="ltr"
 delay=0.12
@@ -14,7 +14,7 @@ del_all="no"
 negate="no"
 trim="none"
 scale_h=100
-cuts=""
+cuts=""  
 dups="none"
 linger=1
 linger_frame=20
@@ -149,7 +149,7 @@ if [[ $cols -eq 0 ]]; then
       else
         if [[ $trim = 0 ]]; then
 				  trim=$((xpos - 20))                      
-				  echo "Trim 1: $trim"
+				#  echo "Trim 1: $trim"
         fi
 			fi
 			filled_seen=1
@@ -162,11 +162,11 @@ if [[ $cols -eq 0 ]]; then
         if [[ $counter -gt 10 ]]; then
   				if [[ $xpos -gt $((page_width / 3)) ]] && [[ $xpos -lt $((2*(page_width / 3))) ]]; then
   					x_begin=$xpos
-  					echo "x_begin: $x_begin"
+  					# echo "x_begin: $x_begin"
   				else
             if [[ $xpos -lt $((page_width / 3)) ]]; then        
   				     trim=0
-  				 	   echo "Trim 2: $trim, xpos:$xpos"
+  				 	  # echo "Trim 2: $trim, xpos:$xpos"
             fi
   				fi
         fi
