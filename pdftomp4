@@ -524,4 +524,4 @@ rm "$base"_temp.png
 echo "$stride $start_point $delay" >> "$base"_"$dt".txt
 
 
-~/docs/gen.sh --frames "$frames_dir" --start_page $start_page --end_page $end_page --bg 
+./frames2mp4 --frames "$frames_dir" --start_page $start_page --end_page $end_page --bg 
