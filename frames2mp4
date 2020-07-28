@@ -75,7 +75,7 @@ if [[ $list != "" ]]; then
 	if [[ "$video_dir" != "" ]] && [[ ! -d "$video_dir" ]]; then
 		mkdir  "$video_dir"
 	fi
-	~/bin/ffmpeg -f concat  -safe 0 -i "$list" -c:v libx264 -crf $crf -pix_fmt yuv420p "$video_file"  #> /dev/null 2>&1 < /dev/null &
+	ffmpeg -f concat  -safe 0 -i "$list" -c:v libx264 -crf $crf -pix_fmt yuv420p "$video_file"  #> /dev/null 2>&1 < /dev/null &
 	exit 1
 fi
 
@@ -111,7 +111,7 @@ echo "Video dir is: $video_dir"
 if [[ -d "$concat" ]]; then
 	video_list="$concat"/vidlist.txt
 	printf "file %s\nduration $delay\n" "$frames"/page_"$pnum"_*.png >> "$video_list"
-	~/bin/ffmpeg -f concat -safe 0 -i "$video_list" -c copy "$video_dir"/"$video_name".mp4
+	ffmpeg -f concat -safe 0 -i "$video_list" -c copy "$video_dir"/"$video_name".mp4
 	exit 1
 fi
 
@@ -226,9 +226,9 @@ if [ -f "$video_file" ]; then
   rm "$video_file"
 fi
 if [ -z ${bg+x} ]; then 
-	~/bin/ffmpeg -f concat  -safe 0 -i "$all_framefile" -c:v libx264 -crf $crf -pix_fmt yuv420p "$video_file"  #> /dev/null 2>&1 < /dev/null &
+	ffmpeg -f concat  -safe 0 -i "$all_framefile" -c:v libx264 -crf $crf -pix_fmt yuv420p "$video_file"  #> /dev/null 2>&1 < /dev/null &
 else
-	~/bin/ffmpeg -f concat  -safe 0 -i "$all_framefile" -c:v libx264 -crf $crf -pix_fmt yuv420p "$video_file"  > /dev/null 2>&1 < /dev/null &
+	ffmpeg -f concat  -safe 0 -i "$all_framefile" -c:v libx264 -crf $crf -pix_fmt yuv420p "$video_file"  > /dev/null 2>&1 < /dev/null &
 	disown -a
 	echo "Generating video is running in the background"
 fi
