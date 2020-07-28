@@ -1,3 +1,4 @@
+#!/bin/bash
 last=100
 start_page=1
 end_page=100
@@ -80,7 +81,7 @@ fi
 
 
 if [[ $frames = "" ]]; then
-  echo "Usage: ./gen.sh --frames framesname"
+  echo "Usage: ./frames2mp4 --frames framesname"
   exit 1
 fi
 
