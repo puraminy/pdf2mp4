@@ -1,6 +1,7 @@
 ## Convert pdf to video
 
-A linux bash file to convert a pdf file to a video in mp4 format. 
+A linux bash file to convert a pdf file to a video in mp4 format. It scans the pages of the pdf file using a sliding window and save them as frames in a folder, then it creates a video from the frames.
+
 
 ## Usage
 
