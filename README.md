@@ -9,7 +9,7 @@ A linux bash file to convert a pdf file to a video in mp4 format. It scans the p
 ./pdftomp4 --input 1column_paper.pdf
 ```
 
-If you have a paper with two columns you can also use:
+If you have a paper with two columns you can also use the following command. This way, the sliding window moves over columns:
 
 ```
 ./pdftomp4 --input 2column_paper.pdf --cols 2
