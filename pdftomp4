@@ -1,14 +1,20 @@
 #!/bin/bash
-start_point=0
-stride=32
-start=1
-end=1000
-win_height=400
-cut_left=100
-cut_top=100
-cols=0
+
+start=1  # start page (from)
+end=1000  # end page (to)
+
+win_height=400 # the height of sliding window (view port)
+stride=32 # the number of pixels to slide
+
+cut_left=100 # left margin to crop
+cut_top=100   # top margin to crop
+
+cols=0  # number of paper columns 
+
+
 direction="ltr"
 default_delay=0.16
+start_point=0
 remove="none"
 del_all="no"
 negate=""
